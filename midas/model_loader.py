@@ -26,7 +26,7 @@ default_models = {
 }
 
 
-def load_model(device, model_path, model_type="dpt_large_384", optimize=True, height=None, square=False):
+def load_model(device, model_path, model_type="dpt_large_384", optimize=True, height=None, square=False, lora_weights=None, lora_rank=8, lora_alpha=16.0):
     """Load the specified network.
 
     Args:
@@ -36,6 +36,9 @@ def load_model(device, model_path, model_type="dpt_large_384", optimize=True, he
         optimize (bool): optimize the model to half-integer on CUDA?
         height (int): inference encoder image height
         square (bool): resize to a square resolution?
+        lora_weights (str): path to LoRA weights (optional)
+        lora_rank (int): LoRA rank (must match training)
+        lora_alpha (float): LoRA alpha (must match training)
 
     Returns:
         The loaded network, the transform which prepares images as input to the network and the dimensions of the
@@ -238,5 +241,21 @@ def load_model(device, model_path, model_type="dpt_large_384", optimize=True, he
 
     if not "openvino" in model_type:
         model.to(device)
+
+    # Load LoRA weights if provided
+    if lora_weights is not None:
+        print(f"Loading LoRA weights from {lora_weights}")
+        try:
+            import sys
+            import os
+            sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            from finetune.lora import inject_lora_to_linear, load_lora_weights
+
+            inject_lora_to_linear(model, rank=lora_rank, alpha=lora_alpha, target_modules=None)
+            load_lora_weights(model, lora_weights)
+            print(f"LoRA weights loaded successfully (rank={lora_rank}, alpha={lora_alpha})")
+        except Exception as e:
+            print(f"Warning: Failed to load LoRA weights: {e}")
+            print("Continuing with base model...")
 
     return model, transform, net_w, net_h

@@ -103,7 +103,7 @@ def create_side_by_side(image, depth, grayscale):
 
 
 def run(input_path, output_path, model_path, model_type="dpt_beit_large_512", optimize=False, side=False, height=None,
-        square=False, grayscale=False):
+        square=False, grayscale=False, lora_weights=None, lora_rank=8, lora_alpha=16.0, model_name=None):
     """Run MonoDepthNN to compute depth maps.
 
     Args:
@@ -116,14 +116,21 @@ def run(input_path, output_path, model_path, model_type="dpt_beit_large_512", op
         height (int): inference encoder image height
         square (bool): resize to a square resolution?
         grayscale (bool): use a grayscale colormap?
+        lora_weights (str): path to LoRA weights (optional)
+        lora_rank (int): LoRA rank
+        lora_alpha (float): LoRA alpha
+        model_name (str): custom model name for output filenames (defaults to model_type)
     """
+    # Use model_name for filenames if provided, otherwise use model_type
+    output_model_name = model_name if model_name is not None else model_type
     print("Initialize")
 
     # select device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device: %s" % device)
 
-    model, transform, net_w, net_h = load_model(device, model_path, model_type, optimize, height, square)
+    model, transform, net_w, net_h = load_model(device, model_path, model_type, optimize, height, square,
+                                                  lora_weights, lora_rank, lora_alpha)
 
     # get input
     if input_path is not None:
@@ -157,7 +164,7 @@ def run(input_path, output_path, model_path, model_type="dpt_beit_large_512", op
             # output
             if output_path is not None:
                 filename = os.path.join(
-                    output_path, os.path.splitext(os.path.basename(image_name))[0] + '-' + model_type
+                    output_path, os.path.splitext(os.path.basename(image_name))[0] + '-' + output_model_name
                 )
                 if not side:
                     utils.write_depth(filename, prediction, grayscale, bits=2)
@@ -187,7 +194,7 @@ def run(input_path, output_path, model_path, model_type="dpt_beit_large_512", op
                     cv2.imshow('MiDaS Depth Estimation - Press Escape to close window ', content/255)
 
                     if output_path is not None:
-                        filename = os.path.join(output_path, 'Camera' + '-' + model_type + '_' + str(frame_index))
+                        filename = os.path.join(output_path, 'Camera' + '-' + output_model_name + '_' + str(frame_index))
                         cv2.imwrite(filename + ".png", content)
 
                     alpha = 0.1
@@ -262,6 +269,24 @@ if __name__ == "__main__":
                              'colormap.'
                         )
 
+    # LoRA parameters
+    parser.add_argument('--lora_weights',
+                        type=str, default=None,
+                        help='Path to LoRA weights file (optional, for fine-tuned models)'
+                        )
+    parser.add_argument('--lora_rank',
+                        type=int, default=8,
+                        help='LoRA rank (must match training, default: 8)'
+                        )
+    parser.add_argument('--lora_alpha',
+                        type=float, default=16.0,
+                        help='LoRA alpha (must match training, default: 16.0)'
+                        )
+    parser.add_argument('--model_name',
+                        type=str, default=None,
+                        help='Custom model name for output filenames (defaults to model_type if not specified)'
+                        )
+
     args = parser.parse_args()
 
 
@@ -274,4 +299,4 @@ if __name__ == "__main__":
 
     # compute depth maps
     run(args.input_path, args.output_path, args.model_weights, args.model_type, args.optimize, args.side, args.height,
-        args.square, args.grayscale)
+        args.square, args.grayscale, args.lora_weights, args.lora_rank, args.lora_alpha, args.model_name)
